@@ -90,6 +90,13 @@ def get_article_data(url, driver):
           data['content'] = "\n".join([p.get_text(strip=True) for p in soup.find_all('p', class_='Normal')]) or None
           img_tag = soup.find('img', class_='lazy')
           data['thumbnail'] = 'https:' + (img_tag.get('data-src') or img_tag.get('src')) if img_tag and not (img_tag.get('data-src') or img_tag.get('src')).startswith('http') else img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+          if img_tag:
+                src = img_tag.get('data-src') or img_tag.get('src')
+                if src and not src.startswith('http'):
+                    src = 'https:' + src
+                data['thumbnail'] = src
+          else:
+                data['thumbnail'] = None
           author_tag = soup.find('span', class_='author_mail')
           data['author'] = author_tag.get_text(strip=True) if author_tag else None
           if not data['author']:
