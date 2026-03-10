@@ -46,7 +46,11 @@ def get_chrome_options():
   return chrome_options
 
 def get_article_urls(page_url):
-    response = requests.get(page_url)
+    headers = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+    response = requests.get(page_url, headers=headers, timeout=10)
     soup = BeautifulSoup(response.content, 'html.parser')
     articles = soup.find_all('h3', class_='title-news') + soup.find_all('h2', class_='title-news')
     urls = [a.find('a')['href'] for a in articles if a.find('a')]
