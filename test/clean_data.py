@@ -51,6 +51,9 @@ df['year'] = df['date'].dt.year
 df['month'] = df['date'].dt.month
 df['hour'] = df['date'].dt.hour
 
+df['content_length'] = df['content'].apply(lambda x: len(str(x).split()))
+df['title_length'] = df['title'].apply(lambda x: len(str(x).split()))
+
 print("Sau khi clean:", len(df))
 
 df.to_csv("vnexpress_clean_data.csv", index=False)
