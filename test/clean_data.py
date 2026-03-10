@@ -27,7 +27,25 @@ df['title_length'] = df['title'].apply(lambda x: len(x.split()))
 df['content_length'] = df['content'].apply(lambda x: len(x.split()))
 
 # convert date
-df['date'] = pd.to_datetime(df['date'], errors='coerce')
+def clean_date(text):
+    if pd.isna(text):
+        return text
+    
+    # bỏ phần "Thứ ..."
+    text = re.sub(r'^Thứ.*?,\s*', '', text)
+
+    # bỏ (GMT+7)
+    text = re.sub(r'\(.*?\)', '', text)
+
+    return text.strip()
+
+df['date'] = df['date'].apply(clean_date)
+
+df['date'] = pd.to_datetime(
+    df['date'],
+    format='%d/%m/%Y, %H:%M',
+    errors='coerce'
+)
 
 df['year'] = df['date'].dt.year
 df['month'] = df['date'].dt.month
