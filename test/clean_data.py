@@ -58,4 +58,8 @@ print("Sau khi clean:", len(df))
 
 df.to_csv("vnexpress_clean_data.csv", index=False)
 
+print(df.info())
+print(df.head())
+print(df.describe())
+
 print("Saved clean data")
