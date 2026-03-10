@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup # type: ignore
 import requests 
 from pprint import pprint
 import pandas as pd # type: ignore
-from queue import Queue
+from queue import Queue, Empty
 import threading
 
 import platform
@@ -130,7 +130,7 @@ def fetch_all_articles(unique_urls, max_workers=5):
             while not queue.empty():
                 try:
                     url = queue.get_nowait()
-                except Queue.Empty:
+                except Empty:
                     break
                 try:
                     article_info = get_article_data(url, browser)
