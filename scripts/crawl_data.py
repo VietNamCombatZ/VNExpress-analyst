@@ -14,23 +14,8 @@ import threading
 
 import platform
 
-DATA_PATH = "../data/"
-
 def get_service():
-    system = platform.system()
-
-    if system == "Windows":
-        drive_path = "C:\\ChromeDriver\\chromedriver.exe"
-        return Service(executable_path=drive_path)
-
-    elif system == "Darwin":   # macOS
-        return Service()       # Selenium tự tìm chromedriver
-
-    elif system == "Linux":
-        return Service()
-
-    else:
-        return Service()
+    return Service()
 
 def get_chrome_options():
   chrome_options = Options()
@@ -44,6 +29,8 @@ def get_chrome_options():
   chrome_options.add_argument("--disable-images")
   chrome_options.add_argument("--disable-notifications")
   chrome_options.add_argument("--disable-web-security")
+  prefs = {"profile.managed_default_content_settings.images": 2}
+  chrome_options.add_experimental_option("prefs", prefs)
   chrome_options.page_load_strategy = "eager"
   return chrome_options
 
@@ -137,25 +124,24 @@ def fetch_all_articles(unique_urls, max_workers=5):
 
     results = []
     failed_urls = []
-
+    browser = selenium.webdriver.Chrome(service=get_service(), options=get_chrome_options())
     def worker():
-        with selenium.webdriver.Chrome(service=get_service(), options=get_chrome_options()) as browser:
-            while not queue.empty():
-                try:
-                    url = queue.get_nowait()
-                except Empty:
-                    break
-                try:
-                    article_info = get_article_data(url, browser)
-                    if article_info:
-                        results.append(article_info)
-                    else:
-                        failed_urls.append(url)
-                except Exception as e:
-                    print(f"Failed to process {url}: {e}")
+        while True:
+            try:
+                url = queue.get_nowait()
+            except Empty:
+                break
+            try:
+                article_info = get_article_data(url, browser)
+                if article_info:
+                    results.append(article_info)
+                else:
                     failed_urls.append(url)
-                finally:
-                    queue.task_done()
+            except Exception as e:
+                print(f"Failed to process {url}: {e}")
+                failed_urls.append(url)
+            finally:
+                queue.task_done()
 
     threads = []
     for _ in range(max_workers):
@@ -174,7 +160,7 @@ base_url = ["https://vnexpress.net/suc-khoe",
 def get_all_urls_page(base_url):
     all_urls_page = []
     for url in base_url:
-        for i in range(1, 30):
+        for i in range(1, 21):
             page_url = f"{url}-p{i}"
             article_urls = get_article_urls(page_url)
             all_urls_page.extend(article_urls)
@@ -188,7 +174,7 @@ def crawl_data():
     unique_urls = set(get_all_urls_page(base_url))
     print(f"Số lượng URL duy nhất: {len(unique_urls)}")
 
-    with open(DATA_PATH + "vnexpress_urls.csv", 'w', encoding='utf-8') as f:
+    with open('vnexpress_urls.csv', 'w', encoding='utf-8') as f:
         for url in unique_urls:
             f.write(url + '\n')
 
@@ -197,7 +183,8 @@ def crawl_data():
     print(f"Số bài báo thu thập được: {len(all_data)}")
     print(f"Số URL thất bại: {len(failed_urls)}")
 
-    pprint(all_data[0])
+    if all_data:
+        pprint(all_data[0])
 
     # re call failed urls
     if failed_urls:
@@ -245,7 +232,7 @@ def crawl_data():
             print(f"Skipping invalid article: {article}")
 
     df = pd.DataFrame(rows)
-    df.to_csv(DATA_PATH + "vnexpress_raw_data.csv", index=False, encoding='utf-8-sig')
+    df.to_csv('vnexpress_raw_data.csv', index=False, encoding='utf-8-sig')
     print("DataFrame đã được lưu thành file vnexpress_raw_data.csv")
 
 if __name__ == "__main__":
