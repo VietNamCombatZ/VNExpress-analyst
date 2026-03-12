@@ -114,12 +114,8 @@ def get_article_data(url, driver):
             categories = [link.get_text(strip=True) for link in links]
 
             if len(categories) > 0:
-                if categories[0] == "Các bệnh":
-                    data['group'] = "Sức khỏe"
-                    data['category'] = "Các bệnh"
-                else:
-                    data['group'] = categories[0]
-                    data['category'] = categories[1] if len(categories) > 1 else categories[0]
+                data['group'] = categories[0]
+                data['category'] = categories[1] if len(categories) > 1 else categories[0]
             else:
                 data['group'] = "Khác"
                 data['category'] = "Khác"
