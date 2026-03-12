@@ -113,8 +113,17 @@ def get_article_data(url, driver):
             links = breadcrumb.find_all('a')
             categories = [link.get_text(strip=True) for link in links]
 
-            data['group'] = categories[0] if len(categories) > 1 else "Khác"
-            data['category'] = categories[1] if len(categories) > 2 else data['group']
+            if len(categories) > 0:
+                if categories[0] == "Các bệnh":
+                    data['group'] = "Sức khỏe"
+                    data['category'] = "Các bệnh"
+                else:
+                    data['group'] = categories[0]
+                    data['category'] = categories[1] if len(categories) > 1 else categories[0]
+            else:
+                data['group'] = "Khác"
+                data['category'] = "Khác"
+
           else:
             data['group'] = "Khác"
             data['category'] = "Khác"
