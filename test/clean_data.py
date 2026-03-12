@@ -3,63 +3,60 @@ import re
 
 df = pd.read_csv("vnexpress_raw_data.csv")
 
-print("Số dòng ban đầu:", len(df))
+print("Initial rows:", len(df))
 
-# 1 remove duplicates
+# remove duplicates
 df = df.drop_duplicates(subset="url")
 
-# 2 remove missing content
+# remove missing
 df = df.dropna(subset=["content", "title"])
 
-# 3 clean text
+# fill missing
+df['author'] = df['author'].fillna("Unknown")
+df['tags'] = df['tags'].fillna("")
+df['nums_of_comments'] = df['nums_of_comments'].fillna(0)
+
+# clean text
 def clean_text(text):
     text = str(text)
     text = re.sub(r'\s+', ' ', text)
-    text = text.strip()
-    return text
+    return text.strip()
 
 df['content'] = df['content'].apply(clean_text)
 df['title'] = df['title'].apply(clean_text)
 
-# 4 tạo feature mới
-
-df['title_length'] = df['title'].apply(lambda x: len(x.split()))
-df['content_length'] = df['content'].apply(lambda x: len(x.split()))
-
-# convert date
+# clean date
 def clean_date(text):
     if pd.isna(text):
         return text
-    
-    # bỏ phần "Thứ ..."
     text = re.sub(r'^Thứ.*?,\s*', '', text)
-
-    # bỏ (GMT+7)
     text = re.sub(r'\(.*?\)', '', text)
-
     return text.strip()
 
 df['date'] = df['date'].apply(clean_date)
+df['date'] = pd.to_datetime(df['date'], format='%d/%m/%Y, %H:%M', errors='coerce')
 
-df['date'] = pd.to_datetime(
-    df['date'],
-    format='%d/%m/%Y, %H:%M',
-    errors='coerce'
-)
+# remove invalid date
+df = df.dropna(subset=['date'])
 
+# feature engineering
 df['year'] = df['date'].dt.year
 df['month'] = df['date'].dt.month
 df['hour'] = df['date'].dt.hour
 
-df['content_length'] = df['content'].apply(lambda x: len(str(x).split()))
-df['title_length'] = df['title'].apply(lambda x: len(str(x).split()))
+df['title_length'] = df['title'].apply(lambda x: len(x.split()))
+df['content_length'] = df['content'].apply(lambda x: len(x.split()))
 
-print("Sau khi clean:", len(df))
+# remove outliers
+df = df[df['content_length'] > 50]
+
+df = df.reset_index(drop=True)
+
+print("After cleaning:", len(df))
 
 df.to_csv("vnexpress_clean_data.csv", index=False)
 
 print(df.info())
-print(df.head())
 print(df.describe())
 
 print("Saved clean data")
