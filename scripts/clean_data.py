@@ -1,7 +1,8 @@
 import pandas as pd
 import re
 
-df = pd.read_csv("vnexpress_raw_data.csv")
+DATA_PATH = "../data/"
+df = pd.read_csv(DATA_PATH + "vnexpress_raw_data.csv")
 
 print("Initial rows:", len(df))
 
@@ -54,7 +55,7 @@ df = df.reset_index(drop=True)
 
 print("After cleaning:", len(df))
 
-df.to_csv("vnexpress_clean_data.csv", index=False)
+df.to_csv(DATA_PATH + "vnexpress_clean_data.csv", index=False)
 
 print(df.info())
 print(df.describe())
