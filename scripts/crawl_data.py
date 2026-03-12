@@ -14,6 +14,8 @@ import threading
 
 import platform
 
+DATA_PATH = "../data/"
+
 def get_service():
     system = platform.system()
 
@@ -186,7 +188,7 @@ def crawl_data():
     unique_urls = set(get_all_urls_page(base_url))
     print(f"Số lượng URL duy nhất: {len(unique_urls)}")
 
-    with open('vnexpress_urls.csv', 'w', encoding='utf-8') as f:
+    with open(DATA_PATH + "vnexpress_urls.csv", 'w', encoding='utf-8') as f:
         for url in unique_urls:
             f.write(url + '\n')
 
@@ -243,7 +245,7 @@ def crawl_data():
             print(f"Skipping invalid article: {article}")
 
     df = pd.DataFrame(rows)
-    df.to_csv('vnexpress_raw_data.csv', index=False, encoding='utf-8-sig')
+    df.to_csv(DATA_PATH + "vnexpress_raw_data.csv", index=False, encoding='utf-8-sig')
     print("DataFrame đã được lưu thành file vnexpress_raw_data.csv")
 
 if __name__ == "__main__":
