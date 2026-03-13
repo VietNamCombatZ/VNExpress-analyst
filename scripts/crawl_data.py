@@ -1,259 +1,218 @@
-import selenium.webdriver # type: ignore
-from selenium.webdriver.chrome.service import Service   # type: ignore
-from selenium.webdriver.chrome.options import Options # type: ignore
-from selenium.webdriver.support.ui import WebDriverWait # type: ignore
-from selenium.webdriver.support import expected_conditions as EC # type: ignore
-from selenium.webdriver.common.by import By # type: ignore
-from tenacity import retry, stop_after_attempt, wait_fixed # type: ignore
-from bs4 import BeautifulSoup # type: ignore
-import requests 
-from pprint import pprint
-import pandas as pd # type: ignore
-from queue import Queue, Empty
-import threading
-
-import platform
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+import time
 
 
 DATA_PATH = "../data/raw_data/"
 
-def get_service():
-    return Service()
+BASE_URLS = [
+    "https://vnexpress.net/suc-khoe",
+    "https://vnexpress.net/giai-tri"
+]
 
-def get_chrome_options():
-  chrome_options = Options()
-  chrome_options.add_argument("--headless=new")
-  chrome_options.add_argument("--disable-gpu")
-  chrome_options.add_argument("--no-sandbox")
-  chrome_options.add_argument("--disable-dev-shm-usage")
-  chrome_options.add_argument("--disable-extensions")
-  chrome_options.add_argument("--disable-logging")
-  chrome_options.add_argument("--log-level=3")
-  chrome_options.add_argument("--disable-images")
-  chrome_options.add_argument("--disable-notifications")
-  chrome_options.add_argument("--disable-web-security")
-  prefs = {"profile.managed_default_content_settings.images": 2}
-  chrome_options.add_experimental_option("prefs", prefs)
-  chrome_options.page_load_strategy = "eager"
-  return chrome_options
-
-def get_article_urls(page_url):
-    headers = {
+HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-    response = requests.get(page_url, headers=headers, timeout=10)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    articles = soup.find_all('h3', class_='title-news') + soup.find_all('h2', class_='title-news')
-    urls = [a.find('a')['href'] for a in articles if a.find('a')]
-    print(f"URL page: {page_url}, số url: {len(urls)}")
-    return urls
+# ---------------------------
+# Lấy URL bài viết từ list page
+# ---------------------------
+def get_article_urls(page_url):
 
-# Lấy dữ liệu bài viết từ URL
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
-def get_article_data(url, driver):
-      try:
-          driver.get(url)
-          WebDriverWait(driver, 5).until(
-              EC.presence_of_element_located((By.TAG_NAME, "body"))
-          )
-          print(f"Loaded {url}")
+    try:
+        res = requests.get(page_url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(res.text, "html.parser")
 
-          soup = BeautifulSoup(driver.page_source, 'html.parser')
-          data = {}
+        articles = soup.find_all("h3", class_="title-news") + \
+                   soup.find_all("h2", class_="title-news")
 
-          data['title'] = soup.find('h1', class_='title-detail').get_text(strip=True) if soup.find('h1', class_='title-detail') else None
-          data['description'] = soup.find('p', class_='description').get_text(strip=True) if soup.find('p', class_='description') else None
-          data['date'] = soup.find('span', class_='date').get_text(strip=True) if soup.find('span', class_='date') else None
-          breadcrumb = soup.find('ul', class_='breadcrumb')
-          if breadcrumb:
-              category_links = breadcrumb.find_all('a')
-              categories = [link.get_text(strip=True) for link in category_links if link]
-              # Remove  category if it is "Công nghệ"
-              categories = [cat for cat in categories if cat not in ['Sức khỏe', 'Giải trí']]
-              # Remove duplicates
-              categories = list(dict.fromkeys(categories))
-              # Join with commas
-              data['category'] = ', '.join(categories) if categories else 'Khác'
-          else:
-              print('else')
-              data['category'] = soup.find('meta', itemprop='articleSection')['content'] if soup.find('meta', itemprop='articleSection') else 'Khác'
-        
-          data['content'] = "\n".join([p.get_text(strip=True) for p in soup.find_all('p', class_='Normal')]) or None
-          img_tag = soup.find('img', class_='lazy')
-          data['thumbnail'] = 'https:' + (img_tag.get('data-src') or img_tag.get('src')) if img_tag and not (img_tag.get('data-src') or img_tag.get('src')).startswith('http') else img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-          if img_tag:
-                src = img_tag.get('data-src') or img_tag.get('src')
-                if src and not src.startswith('http'):
-                    src = 'https:' + src
-                data['thumbnail'] = src
-          else:
-                data['thumbnail'] = None
-          author_tag = soup.find('span', class_='author_mail')
-          data['author'] = author_tag.get_text(strip=True) if author_tag else None
-          if not data['author']:
-            authors = soup.find('p', class_='Normal', style='text-align:right;')
-            # if !authors:
-            if not authors:
-                authors = soup.find('p', class_='Normal', style='align: right;')
-            if not authors:
-                authors = soup.find('p', class_='Normal')[-1].get_text(strip=True)
-            if authors:
-                authors = authors.find('strong').get_text(strip=True) if authors.find('strong') else authors.get_text(strip=True)
-                data['author'] = authors
+        urls = []
+
+        for art in articles:
+            a = art.find("a")
+            if a and a.get("href"):
+                urls.append(a["href"])
+
+        print(f"{page_url} -> {len(urls)} urls")
+
+        return urls
+
+    except Exception as e:
+        print("Error:", page_url, e)
+        return []
+
+
+# ---------------------------
+# Lấy toàn bộ URL
+# ---------------------------
+def get_all_urls():
+
+    all_urls = []
+
+    for base in BASE_URLS:
+        for i in range(1, 21):
+
+            page_url = f"{base}-p{i}"
+            urls = get_article_urls(page_url)
+
+            all_urls.extend(urls)
+
+            time.sleep(0.3)
+
+    unique_urls = list(set(all_urls))
+
+    print("Total unique urls:", len(unique_urls))
+
+    return unique_urls
+
+
+# ---------------------------
+# Crawl nội dung bài viết
+# ---------------------------
+def crawl_article(url):
+
+    try:
+
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        data = {}
+
+        # title
+        title = soup.find("h1", class_="title-detail")
+        data["title"] = title.get_text(strip=True) if title else None
+
+        # description
+        desc = soup.find("p", class_="description")
+        data["description"] = desc.get_text(strip=True) if desc else None
+
+        # date
+        date = soup.find("span", class_="date")
+        data["date"] = date.get_text(strip=True) if date else None
+
+        # content
+        paragraphs = soup.select("article p.Normal")
+
+        seen = set()
+        content = []
+
+        for p in paragraphs:
+
+            text = p.get_text(strip=True)
+
+            if (
+                text
+                and text not in seen
+                and not text.startswith("Video")
+                and not text.startswith("Ảnh")
+            ):
+                seen.add(text)
+                content.append(text)
+
+        data["content"] = "\n".join(content)
+
+        # thumbnail
+        img = soup.find("meta", property="og:image")
+        data["thumbnail"] = img["content"] if img else None
+
+        # author
+        author = soup.find("p", class_="author_mail")
+        data["author"] = author.get_text(strip=True) if author else None
+
+        # tags
+        tag_meta = soup.find("meta", attrs={"name": "its_tag"})
+        if tag_meta and tag_meta.get("content"):
+            data["tags"] = tag_meta["content"]
+        else:
+            data["tags"] = None
+
+        # group + category
+        breadcrumb = soup.find("ul", class_="breadcrumb")
+
+        if breadcrumb:
+
+            cats = [a.get_text(strip=True) for a in breadcrumb.find_all("a")]
+
+            if len(cats) > 0:
+                data["group"] = cats[0]
+                data["category"] = cats[1] 
             else:
-                data['author'] = "Không xác định"
-          data['tags'] = soup.find('meta', attrs={'name': 'its_tag'})['content'].split(', ') if soup.find('meta', attrs={'name': 'its_tag'}) else []
-          data['url'] = url
-          breadcrumb = soup.find('ul', class_='breadcrumb')
+                data["group"] = None
+                data["category"] = None
 
-          
+        else:
 
-          if breadcrumb:
-            links = breadcrumb.find_all('a')
-            categories = [link.get_text(strip=True) for link in links]
+            data["group"] = None
+            data["category"] = None
 
-            if len(categories) > 0:
-                data['group'] = categories[0]
-                data['category'] = categories[1] if len(categories) > 1 else categories[0]
-            else:
-                data['group'] = "Khác"
-                data['category'] = "Khác"
+        # comments
+        cmt = soup.find("label", id="total_comment")
+        data["nums_of_comments"] = int(cmt.text) if cmt else 0
 
-          else:
-            data['group'] = "Khác"
-            data['category'] = "Khác"
-          total_comment_label = soup.find('label', id='total_comment')
-        #   print(f"total_comment_label: {total_comment_label}")
-          data['nums_of_comments'] = int(total_comment_label.get_text(strip=True)) if total_comment_label else 0
+        data["url"] = url
 
-          return data
-      except Exception as e:
-          print(f"Error processing {url}: {e}")
-          raise
+        return data
 
-def fetch_all_articles(unique_urls, max_workers=5):
-    queue = Queue()
-    for url in unique_urls:
-        queue.put(url)
+    except Exception as e:
+
+        print("Error:", url, e)
+        return None
+
+
+# ---------------------------
+# Crawl đa luồng
+# ---------------------------
+def crawl_all_articles(urls):
 
     results = []
-    failed_urls = []
-    browser = selenium.webdriver.Chrome(service=get_service(), options=get_chrome_options())
-    def worker():
-        while True:
-            try:
-                url = queue.get_nowait()
-            except Empty:
-                break
-            try:
-                article_info = get_article_data(url, browser)
-                if article_info:
-                    results.append(article_info)
-                else:
-                    failed_urls.append(url)
-            except Exception as e:
-                print(f"Failed to process {url}: {e}")
-                failed_urls.append(url)
-            finally:
-                queue.task_done()
 
-    threads = []
-    for _ in range(max_workers):
-        t = threading.Thread(target=worker)
-        t.start()
-        threads.append(t)
+    with ThreadPoolExecutor(max_workers=3) as executor:
 
-    for t in threads:
-        t.join()
+        for data in executor.map(crawl_article, urls):
 
-    print(f"Đã thu thập {len(results)} bài báo, thất bại {len(failed_urls)} URL")
-    return results, failed_urls
+            if data:
+                results.append(data)
 
-base_url = ["https://vnexpress.net/suc-khoe",
-    "https://vnexpress.net/giai-tri"]
-def get_all_urls_page(base_url):
-    all_urls_page = []
-    for url in base_url:
-        for i in range(1, 21):
-            page_url = f"{url}-p{i}"
-            article_urls = get_article_urls(page_url)
-            all_urls_page.extend(article_urls)
-    # return all_urls_page
-    return list(set(all_urls_page))
+    return results
 
 
-base_url = ["https://vnexpress.net/suc-khoe",
-    "https://vnexpress.net/giai-tri"]
+# ---------------------------
+# Main pipeline
+# ---------------------------
 def crawl_data():
-    unique_urls = set(get_all_urls_page(base_url))
-    print(f"Số lượng URL duy nhất: {len(unique_urls)}")
 
-    with open(DATA_PATH + 'vnexpress_urls.csv', 'w', encoding='utf-8') as f:
-        for url in unique_urls:
-            f.write(url + '\n')
+    urls = get_all_urls()
 
-    # Lấy dữ liệu bài viết từ các URL
-    all_data, failed_urls = fetch_all_articles(unique_urls, max_workers=5)
-    print(f"Số bài báo thu thập được: {len(all_data)}")
-    print(f"Số URL thất bại: {len(failed_urls)}")
+    articles = crawl_all_articles(urls)
 
-    if all_data:
-        pprint(all_data[0])
+    df = pd.DataFrame(articles)
 
-    # re call failed urls
-    if failed_urls:
-        print(f"Retrying failed URLs: {len(failed_urls)}")
-        retry_data, retry_failed_urls = fetch_all_articles(failed_urls, max_workers=5)
-        all_data.extend(retry_data)
-        failed_urls = retry_failed_urls
-        print(f"After retry, failed URLs: {len(failed_urls)}")
-        print(f"Total articles collected: {len(all_data)}")
-        print(f"Total failed URLs: {len(failed_urls)}")
-    else:
-        print("No failed URLs to retry.")
+    # remove duplicate articles
+    df = df.drop_duplicates(subset=["url"])
 
-    # Lọc bài viết chỉ thuộc "Sức khỏe" hoặc "Giải trí"
-    valid_groups = ['sức khỏe', 'giải trí']
-    all_data = [article for article in all_data if article.get('group', '').lower() in valid_groups]
-    print(f"Số bài viết sau khi lọc: {len(all_data)}")
+    # ---------------------------
+    # lưu raw data
+    # ---------------------------
+    df.to_csv(DATA_PATH + "vnexpress_raw_data.csv", index=False, encoding="utf-8-sig")
 
-    # xuất dữ liệu
-    rows = []
-    for article in all_data:
-        if article is not None and isinstance(article, dict):
-            title = article['title'] if article['title'] is not None else ''
-            description = article['description'] if article['description'] is not None else ''
-            date = article['date'] if article['date'] is not None else ''
-            category = article['category'] if article['category'] is not None else ''
-            thumbnail = article['thumbnail'] if article['thumbnail'] is not None else ''
-            content = article['content'] if article['content'] is not None else ''
-            author = article['author'] if article['author'] is not None else ''
-            tags = ', '.join(article['tags'])  if article['tags'] is not None else ''
-            group = article['group'] if article['group'] is not None else ''
-            nums_of_comments = article['nums_of_comments'] if article['nums_of_comments'] is not None else 0
-            url = article['url'] if article['url'] is not None else ''
+    print("Saved:", len(df), "articles")
 
-            # Thêm dòng dữ liệu vào list
-            rows.append({
-                'title': title,
-                'description': description,
-                'date': date,
-                'category': category,
-                'thumbnail': thumbnail,
-                'content': content,
-                'author': author,
-                'tags': tags,
-                'group': group,
-                'nums_of_comments': nums_of_comments,
-                'url': url,
-            })
-        else:
-            print(f"Skipping invalid article: {article}")
+    # ---------------------------
+    # lưu url crawl thành công
+    # ---------------------------
+    success_urls = df["url"]
 
-    df = pd.DataFrame(rows)
-    df.to_csv(DATA_PATH + 'vnexpress_raw_data.csv', index=False, encoding='utf-8-sig')
-    print("DataFrame đã được lưu thành file vnexpress_raw_data.csv")
+    success_urls.to_csv(
+        DATA_PATH + "vnexpress_urls.csv",
+        index=False,
+        header=["url"],
+        encoding="utf-8-sig"
+    )
+
+    print("Saved:", len(success_urls), "urls")
 
 if __name__ == "__main__":
     crawl_data()
