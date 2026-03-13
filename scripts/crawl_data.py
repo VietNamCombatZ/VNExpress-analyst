@@ -4,6 +4,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import time
+import re
 
 
 DATA_PATH = "../data/raw_data/"
@@ -16,6 +17,53 @@ BASE_URLS = [
 HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
+
+
+# ---------------------------
+# Lấy số comment qua API
+# ---------------------------
+def get_comment_count(url):
+
+    try:
+
+        # lấy article_id từ URL
+        match = re.search(r'-(\d+)\.html', url)
+
+        if not match:
+            return 0
+
+        article_id = match.group(1)
+
+        api = "https://usi-saas.vnexpress.net/index/get"
+
+        params = {
+            "objectid": article_id,
+            "objecttype": 3,
+            "siteid": 1000000,
+            "limit": 1,
+            "offset": 0
+        }
+
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": url,
+            "Accept": "application/json"
+        }
+
+        r = requests.get(api, params=params, headers=headers, timeout=10)
+
+        if r.status_code != 200:
+            return 0
+
+        data = r.json()
+
+        return data["data"]["totalitem"]
+
+    except:
+        return 0
+
+
+
 
 # ---------------------------
 # Lấy URL bài viết từ list page
@@ -163,8 +211,7 @@ def crawl_article(url):
             data["category"] = "Khác"
 
         # comments
-        cmt = soup.find("label", id="total_comment")
-        data["nums_of_comments"] = int(cmt.text) if cmt else 0
+        data["nums_of_comments"] = get_comment_count(url)
 
         data["url"] = url
 
