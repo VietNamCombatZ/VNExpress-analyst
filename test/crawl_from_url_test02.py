@@ -38,7 +38,7 @@ def get_comment_count(driver):
 
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-        wait = WebDriverWait(driver, 1)
+        wait = WebDriverWait(driver, 0.5)
 
         element = wait.until(
             EC.presence_of_element_located((By.ID, "total_comment"))
@@ -137,7 +137,8 @@ def crawl_article(url):
 # ---------------------------
 if __name__ == "__main__":
 
-    test_url = "https://vnexpress.net/thu-ky-dep-quen-tuoi-5045931.html"
+    # test_url = "https://vnexpress.net/thu-ky-dep-quen-tuoi-5045931.html"
+    test_url = "https://vnexpress.net/dan-hoa-hau-dien-ao-dai-tren-pho-di-bo-nguyen-hue-5047609.html"
 
     article = crawl_article(test_url)
 
