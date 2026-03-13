@@ -44,7 +44,7 @@ def get_comment_count(url):
 
         data = r.json()
 
-        return data["data"]["total"]
+        return data["data"]["totalitem"]
 
     except:
         return 0
