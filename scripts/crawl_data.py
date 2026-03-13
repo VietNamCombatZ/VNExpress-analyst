@@ -14,6 +14,9 @@ import threading
 
 import platform
 
+
+DATA_PATH = "../data/raw_data/"
+
 def get_service():
     return Service()
 
@@ -102,12 +105,24 @@ def get_article_data(url, driver):
                 data['author'] = "Không xác định"
           data['tags'] = soup.find('meta', attrs={'name': 'its_tag'})['content'].split(', ') if soup.find('meta', attrs={'name': 'its_tag'}) else []
           data['url'] = url
-          if "suc-khoe" in url:
-            data['group'] = "Sức khỏe"
-          elif "giai-tri" in url:
-            data['group'] = "Giải trí"
+          breadcrumb = soup.find('ul', class_='breadcrumb')
+
+          
+
+          if breadcrumb:
+            links = breadcrumb.find_all('a')
+            categories = [link.get_text(strip=True) for link in links]
+
+            if len(categories) > 0:
+                data['group'] = categories[0]
+                data['category'] = categories[1] if len(categories) > 1 else categories[0]
+            else:
+                data['group'] = "Khác"
+                data['category'] = "Khác"
+
           else:
             data['group'] = "Khác"
+            data['category'] = "Khác"
           total_comment_label = soup.find('label', id='total_comment')
         #   print(f"total_comment_label: {total_comment_label}")
           data['nums_of_comments'] = int(total_comment_label.get_text(strip=True)) if total_comment_label else 0
@@ -174,7 +189,7 @@ def crawl_data():
     unique_urls = set(get_all_urls_page(base_url))
     print(f"Số lượng URL duy nhất: {len(unique_urls)}")
 
-    with open('vnexpress_urls.csv', 'w', encoding='utf-8') as f:
+    with open(DATA_PATH + 'vnexpress_urls.csv', 'w', encoding='utf-8') as f:
         for url in unique_urls:
             f.write(url + '\n')
 
@@ -237,7 +252,7 @@ def crawl_data():
             print(f"Skipping invalid article: {article}")
 
     df = pd.DataFrame(rows)
-    df.to_csv('vnexpress_raw_data.csv', index=False, encoding='utf-8-sig')
+    df.to_csv(DATA_PATH + 'vnexpress_raw_data.csv', index=False, encoding='utf-8-sig')
     print("DataFrame đã được lưu thành file vnexpress_raw_data.csv")
 
 if __name__ == "__main__":
