@@ -6,6 +6,17 @@ from datetime import datetime
 import time
 import re
 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+
+
 
 DATA_PATH = "../data/raw_data/"
 
@@ -18,46 +29,44 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
+# ---------------------------
+# Khởi tạo Selenium
+# ---------------------------
+def init_driver():
+
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # chạy không mở browser
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
+
+    return driver
+
+
+
 
 # ---------------------------
-# Lấy số comment qua API
+# Lấy số comment từ DOM
 # ---------------------------
-def get_comment_count(url):
+def get_comment_count(driver):
 
     try:
 
-        # lấy article_id từ URL
-        match = re.search(r'-(\d+)\.html', url)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-        if not match:
-            return 0
+        wait = WebDriverWait(driver, 1)
 
-        article_id = match.group(1)
+        element = wait.until(
+            EC.presence_of_element_located((By.ID, "total_comment"))
+        )
 
-        api = "https://usi-saas.vnexpress.net/index/get"
+        wait.until(lambda d: element.text.strip().isdigit())
 
-        params = {
-            "objectid": article_id,
-            "objecttype": 3,
-            "siteid": 1000000,
-            "limit": 1,
-            "offset": 0
-        }
-
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Referer": url,
-            "Accept": "application/json"
-        }
-
-        r = requests.get(api, params=params, headers=headers, timeout=10)
-
-        if r.status_code != 200:
-            return 0
-
-        data = r.json()
-
-        return data["data"]["totalitem"]
+        return int(element.text.strip())
 
     except:
         return 0
@@ -122,10 +131,17 @@ def get_all_urls():
 # ---------------------------
 def crawl_article(url):
 
+    driver = init_driver()
+
     try:
 
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
+
+        driver.get(url)
+
+        html = driver.page_source
+
+        # res = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(html, "html.parser")
 
         data = {}
 
@@ -211,14 +227,17 @@ def crawl_article(url):
             data["category"] = "Khác"
 
         # comments
-        data["nums_of_comments"] = get_comment_count(url)
+        data["nums_of_comments"] = get_comment_count(driver)
 
         data["url"] = url
+
+        driver.quit()
 
         return data
 
     except Exception as e:
 
+        driver.quit()
         print("Error:", url, e)
         return None
 
