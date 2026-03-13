@@ -1,8 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 import time
 import re
 
@@ -16,8 +14,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-
-
 DATA_PATH = "../data/raw_data/"
 
 BASE_URLS = [
@@ -29,13 +25,14 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
+
 # ---------------------------
-# Khởi tạo Selenium
+# Khởi tạo Selenium (1 driver duy nhất)
 # ---------------------------
 def init_driver():
 
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # chạy không mở browser
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
 
@@ -47,8 +44,6 @@ def init_driver():
     return driver
 
 
-
-
 # ---------------------------
 # Lấy số comment từ DOM
 # ---------------------------
@@ -58,7 +53,7 @@ def get_comment_count(driver):
 
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-        wait = WebDriverWait(driver, 1)
+        wait = WebDriverWait(driver, 3)
 
         element = wait.until(
             EC.presence_of_element_located((By.ID, "total_comment"))
@@ -72,15 +67,15 @@ def get_comment_count(driver):
         return 0
 
 
-
-
 # ---------------------------
 # Lấy URL bài viết từ list page
 # ---------------------------
 def get_article_urls(page_url):
 
     try:
+
         res = requests.get(page_url, headers=HEADERS, timeout=10)
+
         soup = BeautifulSoup(res.text, "html.parser")
 
         articles = soup.find_all("h3", class_="title-news") + \
@@ -89,15 +84,22 @@ def get_article_urls(page_url):
         urls = []
 
         for art in articles:
+
             a = art.find("a")
+
             if a and a.get("href"):
-                urls.append(a["href"])
+
+                href = a["href"]
+
+                if "vnexpress.net" in href and href.endswith(".html"):
+                    urls.append(href)
 
         print(f"{page_url} -> {len(urls)} urls")
 
         return urls
 
     except Exception as e:
+
         print("Error:", page_url, e)
         return []
 
@@ -110,9 +112,11 @@ def get_all_urls():
     all_urls = []
 
     for base in BASE_URLS:
+
         for i in range(1, 21):
 
             page_url = f"{base}-p{i}"
+
             urls = get_article_urls(page_url)
 
             all_urls.extend(urls)
@@ -129,19 +133,13 @@ def get_all_urls():
 # ---------------------------
 # Crawl nội dung bài viết
 # ---------------------------
-def crawl_article(url):
-
-    driver = init_driver()
+def crawl_article(driver, url):
 
     try:
 
-
         driver.get(url)
 
-        html = driver.page_source
-
-        # res = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
         data = {}
 
@@ -183,25 +181,36 @@ def crawl_article(url):
         data["thumbnail"] = img["content"] if img else None
 
         # author
-        # author = soup.find("p", class_="author_mail")
-        # data["author"] = author.get_text(strip=True) if author else None
         author_tag = soup.find('span', class_='author_mail')
         data['author'] = author_tag.get_text(strip=True) if author_tag else None
+
         if not data['author']:
+
             authors = soup.find('p', class_='Normal', style='text-align:right;')
-            # if !authors:
+
             if not authors:
                 authors = soup.find('p', class_='Normal', style='align: right;')
+
             if not authors:
-                authors = soup.find('p', class_='Normal')[-1].get_text(strip=True)
+                last_p = soup.select("article p.Normal")
+                if last_p:
+                    authors = last_p[-1]
+
             if authors:
-                authors = authors.find('strong').get_text(strip=True) if authors.find('strong') else authors.get_text(strip=True)
-                data['author'] = authors
+
+                strong = authors.find('strong')
+
+                if strong:
+                    data['author'] = strong.get_text(strip=True)
+                else:
+                    data['author'] = authors.get_text(strip=True)
+
             else:
                 data['author'] = "Không xác định"
 
         # tags
         tag_meta = soup.find("meta", attrs={"name": "its_tag"})
+
         if tag_meta and tag_meta.get("content"):
             data["tags"] = tag_meta["content"]
         else:
@@ -231,32 +240,55 @@ def crawl_article(url):
 
         data["url"] = url
 
-        driver.quit()
-
         return data
 
     except Exception as e:
 
-        driver.quit()
         print("Error:", url, e)
+
         return None
 
 
 # ---------------------------
-# Crawl đa luồng
+# Crawl tất cả bài viết
 # ---------------------------
 def crawl_all_articles(urls):
 
-    results = []
+    driver = init_driver()
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    first = True
 
-        for data in executor.map(crawl_article, urls):
+    saved_urls = []
 
-            if data:
-                results.append(data)
+    with open(DATA_PATH + "vnexpress_raw_data.csv", "w", encoding="utf-8-sig") as f:
 
-    return results
+        for i, url in enumerate(urls):
+
+            print(f"Crawling {i+1}/{len(urls)}")
+
+            data = crawl_article(driver, url)
+
+            if not data:
+                continue
+
+            df = pd.DataFrame([data])
+
+            df.to_csv(
+                f,
+                index=False,
+                header=first,
+                mode="a"
+            )
+
+            saved_urls.append(url)
+
+            first = False
+
+            time.sleep(0.5)
+
+    driver.quit()
+
+    return saved_urls
 
 
 # ---------------------------
@@ -266,33 +298,17 @@ def crawl_data():
 
     urls = get_all_urls()
 
-    articles = crawl_all_articles(urls)
+    success_urls = crawl_all_articles(urls)
 
-    df = pd.DataFrame(articles)
-
-    # remove duplicate articles
-    df = df.drop_duplicates(subset=["url"])
-
-    # ---------------------------
-    # lưu raw data
-    # ---------------------------
-    df.to_csv(DATA_PATH + "vnexpress_raw_data.csv", index=False, encoding="utf-8-sig")
-
-    print("Saved:", len(df), "articles")
-
-    # ---------------------------
-    # lưu url crawl thành công
-    # ---------------------------
-    success_urls = df["url"]
-
-    success_urls.to_csv(
+    pd.DataFrame(success_urls, columns=["url"]).to_csv(
         DATA_PATH + "vnexpress_urls.csv",
         index=False,
-        header=["url"],
         encoding="utf-8-sig"
     )
 
     print("Saved:", len(success_urls), "urls")
 
+
 if __name__ == "__main__":
+
     crawl_data()
