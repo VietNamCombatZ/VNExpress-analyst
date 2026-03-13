@@ -166,7 +166,7 @@ def crawl_all_articles(urls):
 
     results = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
 
         for data in executor.map(crawl_article, urls):
 
