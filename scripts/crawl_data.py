@@ -119,8 +119,22 @@ def crawl_article(url):
         data["thumbnail"] = img["content"] if img else None
 
         # author
-        author = soup.find("p", class_="author_mail")
-        data["author"] = author.get_text(strip=True) if author else None
+        # author = soup.find("p", class_="author_mail")
+        # data["author"] = author.get_text(strip=True) if author else None
+        author_tag = soup.find('span', class_='author_mail')
+        data['author'] = author_tag.get_text(strip=True) if author_tag else None
+        if not data['author']:
+            authors = soup.find('p', class_='Normal', style='text-align:right;')
+            # if !authors:
+            if not authors:
+                authors = soup.find('p', class_='Normal', style='align: right;')
+            if not authors:
+                authors = soup.find('p', class_='Normal')[-1].get_text(strip=True)
+            if authors:
+                authors = authors.find('strong').get_text(strip=True) if authors.find('strong') else authors.get_text(strip=True)
+                data['author'] = authors
+            else:
+                data['author'] = "Không xác định"
 
         # tags
         tag_meta = soup.find("meta", attrs={"name": "its_tag"})
@@ -137,16 +151,16 @@ def crawl_article(url):
             cats = [a.get_text(strip=True) for a in breadcrumb.find_all("a")]
 
             if len(cats) > 0:
-                data["group"] = cats[0]
-                data["category"] = cats[1] 
+                data['group'] = cats[0]
+                data['category'] = cats[1] if len(cats) > 1 else cats[0]
             else:
-                data["group"] = None
-                data["category"] = None
+                data['group'] = "Khác"
+                data['category'] = "Khác"
 
         else:
 
-            data["group"] = None
-            data["category"] = None
+            data["group"] = "Khác"
+            data["category"] = "Khác"
 
         # comments
         cmt = soup.find("label", id="total_comment")
