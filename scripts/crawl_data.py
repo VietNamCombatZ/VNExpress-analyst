@@ -213,6 +213,11 @@ def crawl_data():
     else:
         print("No failed URLs to retry.")
 
+    # Lọc bài viết chỉ thuộc "Sức khỏe" hoặc "Giải trí"
+    valid_groups = ['sức khỏe', 'giải trí']
+    all_data = [article for article in all_data if article.get('group', '').lower() in valid_groups]
+    print(f"Số bài viết sau khi lọc: {len(all_data)}")
+
     # xuất dữ liệu
     rows = []
     for article in all_data:
