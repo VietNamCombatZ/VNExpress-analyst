@@ -3,3 +3,5 @@ tenacity
 beautifulsoup4
 requests
 pandas
+wordcloud
+scipy
