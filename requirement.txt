@@ -1,9 +1,12 @@
+pandas
+numpy
+matplotlib
+seaborn
+wordcloud
 selenium
 tenacity
 beautifulsoup4
 requests
-pandas
-wordcloud
 scipy
 underthesea
 sklearn
