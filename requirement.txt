@@ -7,3 +7,4 @@ wordcloud
 scipy
 underthesea
 sklearn
+webdriver_manager
