@@ -9,5 +9,5 @@ beautifulsoup4
 requests
 scipy
 underthesea
-sklearn
+scikit-learn
 webdriver_manager
